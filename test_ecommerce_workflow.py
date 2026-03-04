@@ -19,6 +19,30 @@ def driver():
     yield driver
     driver.quit()
 
+@pytest.fixture
+def authenticated_user(driver, request):
+    data = request.param
+
+    # Login
+    driver.get(f"{BASE_URL}/login")
+    driver.find_element(By.ID, "Email").send_keys(data["username"])
+    driver.find_element(By.ID, "Password").send_keys(data["password"])
+    driver.find_element(By.CSS_SELECTOR, "input.login-button").click()
+
+    until(driver, lambda d: "Log out" in d.page_source)
+
+    # Ensure cart empty before test
+    empty_cart(driver)
+
+    yield data
+
+    # Postconditions
+    empty_cart(driver)
+
+    logout_btns = driver.find_elements(By.LINK_TEXT, "Log out")
+    if logout_btns:
+        logout_btns[0].click()
+
 def add_create_your_own_jewelry(driver, qty=1, length=25):
     # Leaving default options for now
     driver.get("https://demowebshop.tricentis.com/create-it-yourself-jewelry")
@@ -122,103 +146,56 @@ def add_product(driver, min_price=0, qty=1, timeout=10, product_props=None):
         name = details.find_element(By.TAG_NAME, "a").text
         return name, price
 
-@pytest.mark.parametrize("data", test_data)
-def test_ecommerce_workflow(driver, data):
-    try:
-        selected_products = []
+@pytest.mark.parametrize("authenticated_user", test_data, indirect=True)
+def test_ecommerce_workflow(driver, authenticated_user):
+    data = authenticated_user
+    selected_products = []
 
-        # 1. Login
-        driver.get("https://demowebshop.tricentis.com/login")
+    # Add computer
+    name, price = add_build_your_own_computer(
+        driver,
+        qty=data["computer"]["qty"]
+    )
+    selected_products.append((name, price))
 
-        driver.find_element(By.ID, "Email").send_keys(data["username"])
-        driver.find_element(By.ID, "Password").send_keys(data["password"])
-        driver.find_element(By.CSS_SELECTOR, "input.login-button").click()
+    # Add jewelry
+    name, price = add_create_your_own_jewelry(
+        driver,
+        qty=data["jewelry"]["qty"]
+    )
+    selected_products.append((name, price))
 
-        until(driver, lambda d: "Log out" in d.page_source, timeout=10, message="Login failed or took too long")
+    # Open cart
+    driver.find_element(By.CSS_SELECTOR, ".ico-cart").click()
 
-        # Verify login success
-        assert "Log out" in driver.page_source
+    # Verify total items
+    total_items = get_cart_qty(driver)
+    assert total_items == 3
 
-        # 2. Clean Cart (Precondition: Cart must be empty)
-        driver.get("https://demowebshop.tricentis.com/cart")
+    # Verify product names present
+    page_text = driver.page_source
+    for name, _ in selected_products:
+        assert name in page_text
 
-        if get_cart_qty(driver) > 0:
-            qty_inputs = driver.find_elements(By.CLASS_NAME, "qty-input")
+    # Verify subtotal calculation
+    unit_prices = driver.find_elements(By.CLASS_NAME, "product-unit-price")
+    total_calc = sum(parse_price(p.text) for p in unit_prices)
 
-            for input_field in qty_inputs:
-                input_field.clear()
-                input_field.send_keys("0")
+    subtotal = parse_price(
+        driver.find_element(By.CLASS_NAME, "product-subtotal").text
+    )
 
-            driver.find_element(By.NAME, "updatecart").click()
+    assert round(subtotal, 2) >= round(total_calc, 2)
 
-        assert get_cart_qty(driver) == 0
+    # Remove first item
+    qty_input = driver.find_element(By.CLASS_NAME, "qty-input")
+    qty_input.clear()
+    qty_input.send_keys("0")
 
-        # Step 1-3: Open homepage
-        driver.get("https://demowebshop.tricentis.com/")
-        assert "Demo Web Shop" in driver.title
+    driver.find_element(By.NAME, "updatecart").click()
 
-        # Step 4: Computers Category to Desktops Subcategory
-        navigate(driver, "Computers", "Desktops")
+    until(driver, lambda d: get_cart_qty(d) == 1)
 
-        # Step 6-10: first product > 1100 (Build Your Own Computer)
-        name, price = add_product(driver, data["computer"]["price"], qty=data["computer"]["qty"])
-        selected_products.append((name, price))
-
-        # Step 11-12: Jewelry product (Create Your Own Jewelry)
-        navigate(driver, "Jewelry")
-        name, price = add_product(driver, data["jewelry"]["price"], qty=data["jewelry"]["qty"])
-        selected_products.append((name, price))
-        
-        # Step 13: Open shopping cart
-        driver.find_element(By.CSS_SELECTOR, ".ico-cart").click()
-
-        # Step 14: verify products visible
-        total_items = get_total_cart_items(driver)
-        assert total_items == 3  # or the expected number of items
-
-        # Step 15: verify product names
-        page_text = driver.page_source
-        for name, _ in selected_products:
-            assert name in page_text
-
-        # Step 16: Arithmetic verification (subtotal >= sum of unit prices)
-        prices_elements = driver.find_elements(By.CLASS_NAME, "product-unit-price")
-        total_calc = sum(parse_price(p.text) for p in prices_elements)
-
-        subtotal_text = driver.find_element(By.CLASS_NAME, "product-subtotal").text
-        subtotal = parse_price(subtotal_text)
-
-        assert round(subtotal, 2) >= round(total_calc, 2)
-
-        # Step 17: Change first item quantity to 0
-        qty_input = driver.find_element(By.CLASS_NAME, "qty-input")
-        qty_input.clear()
-        qty_input.send_keys("0")
-
-        # Step 18: Update cart
-        driver.find_element(By.NAME, "updatecart").click()
-
-        # Step 19: Cart quantity decreased
-        assert get_cart_qty(driver) == 1
-
-        # Step 20: Final cart state
-        cart_rows = driver.find_elements(By.CSS_SELECTOR, ".cart-item-row")
-        assert len(cart_rows) == 1
-
-    finally:
-        # Clear cart
-        driver.get("https://demowebshop.tricentis.com/cart")
-
-        qty_inputs = driver.find_elements(By.CLASS_NAME, "qty-input")
-        for input_field in qty_inputs:
-            input_field.clear()
-            input_field.send_keys("0")
-
-        update_buttons = driver.find_elements(By.NAME, "updatecart")
-        if update_buttons:
-            update_buttons[0].click()
-
-        # Logout
-        logout_buttons = driver.find_elements(By.LINK_TEXT, "Log out")
-        if logout_buttons:
-            logout_buttons[0].click()
+    # Final verification
+    rows = driver.find_elements(By.CSS_SELECTOR, ".cart-item-row")
+    assert len(rows) == 1

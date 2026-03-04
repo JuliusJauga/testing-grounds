@@ -1,12 +1,12 @@
 import json
 import re
 from time import time
-from selenium.common import StaleElementReferenceException
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
 retries = 5
+BASE_URL = "https://demowebshop.tricentis.com"
 
 def until(driver, condition, timeout=10, message=""):
     try:
@@ -61,3 +61,17 @@ def remove_first_product(driver):
 def load_test_data_json(path):
     with open(path, "r", encoding="utf-8") as file:
         return json.load(file)
+
+def empty_cart(driver):
+    driver.get(f"{BASE_URL}/cart")
+
+    if get_cart_qty(driver) > 0:
+        qty_inputs = driver.find_elements(By.CLASS_NAME, "qty-input")
+
+        for field in qty_inputs:
+            field.clear()
+            field.send_keys("0")
+
+        driver.find_element(By.NAME, "updatecart").click()
+
+    until(driver, lambda d: get_cart_qty(d) == 0)

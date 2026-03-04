@@ -4,6 +4,8 @@ from selenium.webdriver.common.by import By
 
 from helpers import *
 
+test_data = load_test_data_json("test_data.json")
+
 @pytest.fixture
 def driver():
     options = webdriver.ChromeOptions()
@@ -120,11 +122,37 @@ def add_product(driver, min_price=0, qty=1, timeout=10, product_props=None):
         name = details.find_element(By.TAG_NAME, "a").text
         return name, price
 
-
-def test_ecommerce_workflow(driver):
-    selected_products = []
-
+@pytest.mark.parametrize("data", test_data)
+def test_ecommerce_workflow(driver, data):
     try:
+        selected_products = []
+
+        # 1. Login
+        driver.get("https://demowebshop.tricentis.com/login")
+
+        driver.find_element(By.ID, "Email").send_keys(data["username"])
+        driver.find_element(By.ID, "Password").send_keys(data["password"])
+        driver.find_element(By.CSS_SELECTOR, "input.login-button").click()
+
+        until(driver, lambda d: "Log out" in d.page_source, timeout=10, message="Login failed or took too long")
+
+        # Verify login success
+        assert "Log out" in driver.page_source
+
+        # 2. Clean Cart (Precondition: Cart must be empty)
+        driver.get("https://demowebshop.tricentis.com/cart")
+
+        if get_cart_qty(driver) > 0:
+            qty_inputs = driver.find_elements(By.CLASS_NAME, "qty-input")
+
+            for input_field in qty_inputs:
+                input_field.clear()
+                input_field.send_keys("0")
+
+            driver.find_element(By.NAME, "updatecart").click()
+
+        assert get_cart_qty(driver) == 0
+
         # Step 1-3: Open homepage
         driver.get("https://demowebshop.tricentis.com/")
         assert "Demo Web Shop" in driver.title
@@ -133,12 +161,12 @@ def test_ecommerce_workflow(driver):
         navigate(driver, "Computers", "Desktops")
 
         # Step 6-10: first product > 1100 (Build Your Own Computer)
-        name, price = add_product(driver, 1100, qty=2)
+        name, price = add_product(driver, data["computer"]["price"], qty=data["computer"]["qty"])
         selected_products.append((name, price))
 
         # Step 11-12: Jewelry product (Create Your Own Jewelry)
         navigate(driver, "Jewelry")
-        name, price = add_product(driver, 0, qty=1)
+        name, price = add_product(driver, data["jewelry"]["price"], qty=data["jewelry"]["qty"])
         selected_products.append((name, price))
         
         # Step 13: Open shopping cart
@@ -178,4 +206,19 @@ def test_ecommerce_workflow(driver):
         assert len(cart_rows) == 1
 
     finally:
-        driver.quit()
+        # Clear cart
+        driver.get("https://demowebshop.tricentis.com/cart")
+
+        qty_inputs = driver.find_elements(By.CLASS_NAME, "qty-input")
+        for input_field in qty_inputs:
+            input_field.clear()
+            input_field.send_keys("0")
+
+        update_buttons = driver.find_elements(By.NAME, "updatecart")
+        if update_buttons:
+            update_buttons[0].click()
+
+        # Logout
+        logout_buttons = driver.find_elements(By.LINK_TEXT, "Log out")
+        if logout_buttons:
+            logout_buttons[0].click()

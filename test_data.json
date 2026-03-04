@@ -1,0 +1,14 @@
+[
+  {
+    "username": "testukas2@gmail.com",
+    "password": "password123",
+    "computer": {
+      "price": 1100,
+      "qty": 2
+    },
+    "jewelry": {
+      "price": 0,
+      "qty": 1
+    }
+  }
+]

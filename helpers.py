@@ -1,6 +1,12 @@
+import json
+import re
+from time import time
+from selenium.common import StaleElementReferenceException
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+
+retries = 5
 
 def until(driver, condition, timeout=10, message=""):
     try:
@@ -16,8 +22,12 @@ def wait_for_cart_qty(driver, expected, timeout=10):
     until(driver, lambda d: get_cart_qty(d) == expected, timeout, f"Expected cart quantity to be {expected}")
 
 def get_cart_qty(driver):
-    text = driver.find_element(By.CSS_SELECTOR, ".cart-qty").text
-    return int(text.strip("()"))
+    wait = WebDriverWait(driver, 10)
+
+    element = until(driver, lambda d: d.find_element(By.CLASS_NAME, "cart-qty"))
+
+    text = element.text.strip()
+    return int(re.search(r"\d+", text).group())
 
 def parse_price(text):
     return float(text.replace("$", "").replace(",", ""))
@@ -47,3 +57,7 @@ def remove_first_product(driver):
     driver.find_element(By.NAME, "updatecart").click()
 
     wait_for_cart_qty(driver, total_before - qty_before)
+
+def load_test_data_json(path):
+    with open(path, "r", encoding="utf-8") as file:
+        return json.load(file)

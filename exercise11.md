@@ -8,10 +8,10 @@
 |---|---|
 | **Test Case ID** | TC_ECOM_001 |
 | **Test Case Description** | Verify end-to-end E-Commerce workflow where high-price products from Featured Products (price > 900.00) and Jewelry category (price > 300.00) are added to the shopping cart, validated, and managed by updating item quantity to remove a product. |
-| **Pre-Conditions** | User can access https://demowebshop.tricentis.com/ and a web browser is installed. |
+| **Pre-Conditions** | 1. User is registered in the system. Valid login credentials are available in external JSON test data. User is successfully logged into https://demowebshop.tricentis.com/. Shopping cart is empty before test execution. |
 | **Test Data** | Featured Products filter: price > 900.00; Jewelry category filter: price > 300.00; Cart quantity update value: 0 |
 | **Expected Result** | Products matching the defined price filters are successfully added to the cart, success notifications appear, shopping cart counter updates correctly (1 -> 2 -> 3), and setting quantity to 0 removes the item from the cart. |
-| **Post Condition** | Shopping cart reflects updated contents after item removal and remaining products stay visible in the cart. |
+| **Post Condition** | 1. Shopping cart is cleared (all quantities set to 0 and updated). User is logged out successfully. System returns to clean state for next execution. |
 | **Project Name** | Demo Web Shop Automation |
 | **Module Name** | Product Catalog / Shopping Cart |
 | **Created By** | Julius Jauga |
